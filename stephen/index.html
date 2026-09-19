@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flint 3 Remote Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #161d2e;
+    --panel2: #1e2740;
+    --border: #2a3450;
+    --text: #e8ecf5;
+    --muted: #8a93ab;
+    --accent: #4a90d9;
+    --accent2: #5fb0ff;
+    --danger: #e35d5d;
+    --good: #4ad9a0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 32px; width: 100%; max-width: 380px; }
+  .card h1 { margin-top: 0; font-size: 20px; }
+  input, textarea, select {
+    width: 100%; padding: 10px 12px; margin: 8px 0 16px;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  textarea { font-family: ui-monospace, monospace; min-height: 180px; resize: vertical; font-size: 12px; }
+  button {
+    padding: 10px 16px; background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { background: var(--accent2); }
+  button.danger { background: var(--danger); }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.small { padding: 5px 10px; font-size: 12px; }
+  .error { color: var(--danger); font-size: 13px; margin-top: -8px; margin-bottom: 12px; }
+  .ok { color: var(--good); font-size: 13px; }
+
+  .app { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 200px; background: var(--panel); border-right: 1px solid var(--border);
+    padding: 20px 0; flex-shrink: 0;
+  }
+  .sidebar h2 { font-size: 15px; padding: 0 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+  .sidebar a { display: block; padding: 10px 20px; color: var(--muted); text-decoration: none; font-size: 14px; cursor: pointer; }
+  .sidebar a.active, .sidebar a:hover { color: var(--text); background: var(--panel2); }
+  .main { flex: 1; padding: 28px 36px; max-width: 900px; min-width: 0; overflow-x: auto; }
+  .main h1 { font-size: 22px; margin-top: 0; }
+  .menu-toggle { display: none; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .table-wrap { overflow-x: auto; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--panel2); border: 1px solid var(--border); }
+  .pw-display {
+    font-family: ui-monospace, monospace; font-size: 28px; letter-spacing: 2px;
+    background: var(--panel2); border: 1px solid var(--border); padding: 16px 20px;
+    border-radius: 10px; display: inline-block; margin: 12px 0;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: -10px; margin-bottom: 12px; }
+
+  .qr-box { background: #fff; padding: 12px; border-radius: 10px; display: inline-block; margin: 12px 0; }
+  .qr-box img { display: block; width: 180px; height: 180px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .tabs button { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); padding: 8px 14px; }
+  .tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  .blocks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .block {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; cursor: grab;
+  }
+  .block.dragging { opacity: 0.4; }
+  .block-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .block-type { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .block-actions button { padding: 3px 8px; font-size: 11px; margin-left: 4px; }
+  .block-field { width: 100%; margin: 0; }
+  .add-block-menu { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+
+  .preview-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px;
+  }
+  .preview-overlay[hidden] { display: none; }
+  .preview-panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    width: 100%; max-width: 420px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .preview-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  #preview-frame { width: 100%; height: 60vh; border: none; background: #fff; }
+
+  @media (max-width: 720px) {
+    .app { flex-direction: column; }
+    .sidebar {
+      width: 100%; border-right: none; border-bottom: 1px solid var(--border);
+      padding: 10px 0; display: none;
+    }
+    .sidebar.open { display: block; }
+    .menu-toggle {
+      display: block; background: var(--panel); border-bottom: 1px solid var(--border);
+      padding: 12px 16px; font-size: 15px; color: var(--text); cursor: pointer;
+    }
+    .main { padding: 18px 16px; max-width: 100%; }
+    .pw-display { font-size: 22px; width: 100%; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const appEl = document.getElementById('app');
+const GUEST_SSID = 'Stephen Guest';
+
+function getBase() { return localStorage.getItem('flint3_api_base') || 'https://gl-be9300.ewe-pride.ts.net'; }
+function getToken() { return localStorage.getItem('flint3_api_token') || ''; }
+
+async function api(path, opts = {}) {
+  const res = await fetch(getBase() + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-Api-Token': getToken(), ...(opts.headers || {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'request failed (' + res.status + ')');
+  return data;
+}
+
+function h(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.firstElementChild;
+}
+function escapeHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escapeAttr(s) {
+  return (s || '').replace(/"/g, '&quot;');
+}
+
+// ---------- Login (token entry) ----------
+function renderLogin(errorMsg) {
+  appEl.innerHTML = '';
+  appEl.appendChild(h(`
+    <div class="center-screen">
+      <div class="card">
+        <h1>Flint 3 Remote Dashboard</h1>
+        <p class="hint">Router ရဲ့ API base URL နှင့် token ကို ရိုက်ထည့်ပါ</p>
+        ${errorMsg ? `<div class="error">${errorMsg}</div>` : ''}
+        <form id="login-form">
+          <input type="text" id="base" placeholder="API base URL" value="${escapeAttr(getBase())}" required />
+          <input type="password" id="token" placeholder="API token" required />
+          <button type="submit">Connect</button>
+        </form>
+      </div>
+    </div>
+  `));
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const base = document.getElementById('base').value.trim().replace(/\/$/, '');
+    const token = document.getElementById('token').value.trim();
+    localStorage.setItem('flint3_api_base', base);
+    localStorage.setItem('flint3_api_token', token);
+    try {
+      await api('/api/password');
+      renderDashboard();
+    } catch (err) {
+      renderLogin(err.message);
+    }
+  });
+}
+
+// ---------- Dashboard shell ----------
+const PAGES = [
+  { id: 'clients', label: 'Clients' },
+  { id: 'guest-portal', label: 'Guest Portal Editor' },
+  { id: 'vpn', label: 'VPN Config' },
+  { id: 'telegram', label: 'Telegram Bot' },
+  { id: 'password', label: 'Guest Password' },
+  { id: 'settings', label: 'Settings' },
+];
+
+function renderDashboard(activePage = 'clients') {
+  appEl.innerHTML = '';
+  const shell = h(`
+    <div>
+      <div class="menu-toggle" id="menu-toggle">&#9776; Menu</div>
+      <div class="app">
+        <div class="sidebar" id="sidebar">
+          <h2>Flint 3</h2>
+          ${PAGES.map((p) => `<a data-page="${p.id}">${p.label}</a>`).join('')}
+          <a id="logout" style="margin-top:20px;color:var(--danger)">Disconnect</a>
+        </div>
+        <div class="main" id="main"></div>
+      </div>
+    </div>
+  `);
+  appEl.appendChild(shell);
+
+  document.getElementById('menu-toggle').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+  });
+
+  shell.querySelectorAll('a[data-page]').forEach((a) => {
+    a.addEventListener('click', () => {
+      shell.querySelectorAll('a[data-page]').forEach((x) => x.classList.remove('active'));
+      a.classList.add('active');
+      document.getElementById('sidebar').classList.remove('open');
+      loadPage(a.dataset.page);
+    });
+  });
+  shell.querySelector(`a[data-page="${activePage}"]`).classList.add('active');
+  document.getElementById('logout').addEventListener('click', () => {
+    localStorage.removeItem('flint3_api_token');
+    renderLogin();
+  });
+
+  loadPage(activePage);
+}
+
+const mainEl = () => document.getElementById('main');
+
+async function loadPage(page) {
+  const el = mainEl();
+  el.innerHTML = '<p style="color:var(--muted)">Loading...</p>';
+  try {
+    if (page === 'clients') return renderClients(el);
+    if (page === 'guest-portal') return renderGuestPortal(el);
+    if (page === 'vpn') return renderVpn(el);
+    if (page === 'telegram') return renderTelegram(el);
+    if (page === 'password') return renderPassword(el);
+    if (page === 'settings') return renderSettings(el);
+  } catch (err) {
+    el.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+
+// ---------- Clients (GL.iNet-style Online/Offline split) ----------
+function clientRow(c) {
+  return `<tr>
+    <td>${escapeHtml(c.hostname)}</td>
+    <td>${escapeHtml(c.ip)}<br/><span style="color:var(--muted);font-size:11px">${escapeHtml(c.mac)}</span></td>
+    <td><span class="badge">${escapeHtml(c.network)}</span></td>
+    <td>${c.reserved ? '<span class="ok">●</span> Reserved' : '<span style="color:var(--muted)">—</span>'}</td>
+  </tr>`;
+}
+
+async function renderClients(el) {
+  const { clients, onlineCount, offlineCount } = await api('/api/clients');
+  const online = clients.filter((c) => c.online);
+  const offline = clients.filter((c) => !c.online);
+  el.innerHTML = `
+    <h1>Clients</h1>
+    <p class="hint">Network ၅ ခုစလုံးက client များ (WiFi association အခြေခံပြီး Online/Offline ခွဲထားသည်)</p>
+
+    <h3 style="margin-bottom:6px">Online Clients (${onlineCount})</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>IP / MAC</th><th>Network</th><th>Reserved IP</th></tr></thead>
+        <tbody>${online.map(clientRow).join('') || '<tr><td colspan="4" style="color:var(--muted)">No online clients</td></tr>'}</tbody>
+      </table>
+    </div>
+
+    <h3 style="margin:24px 0 6px">Offline Clients (${offlineCount})</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>IP / MAC</th><th>Network</th><th>Reserved IP</th></tr></thead>
+        <tbody>${offline.map(clientRow).join('') || '<tr><td colspan="4" style="color:var(--muted)">No offline leases</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ---------- Guest portal: block-based visual editor ----------
+const GUEST_PAGES = [
+  { id: 'splash', label: 'Splash (login form)' },
+  { id: 'error', label: 'Wrong password' },
+  { id: 'success', label: 'Connected' },
+];
+
+const BLOCK_DEFS = {
+  heading: { label: 'Heading', icon: 'H' },
+  text: { label: 'Text', icon: 'T' },
+  button: { label: 'Button/Link', icon: 'B' },
+  image: { label: 'Image', icon: 'I' },
+  spacer: { label: 'Spacer', icon: 'S' },
+};
+
+function blockToHtml(b) {
+  switch (b.type) {
+    case 'heading': return `<h2>${escapeHtml(b.text)}</h2>`;
+    case 'text': return `<p>${escapeHtml(b.text)}</p>`;
+    case 'button': return `<p><a href="${escapeAttr(b.href)}" style="display:inline-block;padding:10px 24px;background:#4a90d9;color:#fff;border-radius:8px;text-decoration:none">${escapeHtml(b.text)}</a></p>`;
+    case 'image': return `<p><img src="${escapeAttr(b.src)}" style="max-width:100%;border-radius:8px" /></p>`;
+    case 'spacer': return `<div style="height:${b.height || 20}px"></div>`;
+    case 'login-form': return `<form method="POST" action="/guest-auth">
+  <input type="password" name="password" placeholder="Password" autofocus required
+    style="font-size:18px;padding:10px;width:80%;max-width:300px;margin-bottom:12px" />
+  <br/>
+  <button type="submit" style="font-size:18px;padding:10px 30px">Connect</button>
+</form>`;
+    default: return '';
+  }
+}
+
+function blocksToPage(blocks) {
+  const body = blocks.map(blockToHtml).join('\n');
+  return `<!DOCTYPE html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,sans-serif;text-align:center;margin-top:60px">
+${body}
+</body></html>`;
+}
+
+// Best-effort parse of existing HTML back into blocks (heading/paragraph/form only).
+function htmlToBlocks(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const blocks = [];
+  doc.body.querySelectorAll('h2, p, form, img').forEach((elm) => {
+    if (elm.tagName === 'FORM') {
+      blocks.push({ type: 'login-form' });
+    } else if (elm.tagName === 'IMG') {
+      blocks.push({ type: 'image', src: elm.getAttribute('src') || '' });
+    } else if (elm.tagName === 'H2') {
+      blocks.push({ type: 'heading', text: elm.textContent });
+    } else if (elm.tagName === 'P') {
+      const a = elm.querySelector('a');
+      if (a) blocks.push({ type: 'button', text: a.textContent, href: a.getAttribute('href') || '' });
+      else if (elm.textContent.trim()) blocks.push({ type: 'text', text: elm.textContent });
+    }
+  });
+  return blocks.length ? blocks : [{ type: 'heading', text: 'Title' }, { type: 'text', text: 'Body text' }];
+}
+
+let dragSrcIndex = null;
+
+function renderBlockEditor(el, page, blocks) {
+  el.querySelector('.blocks').innerHTML = blocks.map((b, i) => `
+    <div class="block" draggable="true" data-i="${i}">
+      <div class="block-head">
+        <span class="block-type">${BLOCK_DEFS[b.type] ? BLOCK_DEFS[b.type].label : b.type}</span>
+        <span class="block-actions">
+          ${b.type !== 'login-form' ? `<button class="ghost small" data-act="up" data-i="${i}">&uarr;</button>
+          <button class="ghost small" data-act="down" data-i="${i}">&darr;</button>
+          <button class="danger small" data-act="del" data-i="${i}">Delete</button>` : '<span class="hint" style="margin:0">(required, fixed)</span>'}
+        </span>
+      </div>
+      ${b.type === 'heading' || b.type === 'text' ? `<input class="block-field" data-field="text" data-i="${i}" value="${escapeAttr(b.text)}" />` : ''}
+      ${b.type === 'button' ? `<input class="block-field" data-field="text" data-i="${i}" value="${escapeAttr(b.text)}" placeholder="Button text" />
+        <input class="block-field" data-field="href" data-i="${i}" value="${escapeAttr(b.href)}" placeholder="Link URL" style="margin-top:6px" />` : ''}
+      ${b.type === 'image' ? `<input class="block-field" data-field="src" data-i="${i}" value="${escapeAttr(b.src)}" placeholder="Image URL" />` : ''}
+      ${b.type === 'login-form' ? `<p class="hint" style="margin:0">Password input + Connect button (Guest login form)</p>` : ''}
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.block-field').forEach((inp) => {
+    inp.addEventListener('input', () => {
+      const i = Number(inp.dataset.i);
+      blocks[i][inp.dataset.field] = inp.value;
+    });
+  });
+  el.querySelectorAll('[data-act]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.i);
+      if (btn.dataset.act === 'del') blocks.splice(i, 1);
+      if (btn.dataset.act === 'up' && i > 0) [blocks[i - 1], blocks[i]] = [blocks[i], blocks[i - 1]];
+      if (btn.dataset.act === 'down' && i < blocks.length - 1) [blocks[i + 1], blocks[i]] = [blocks[i], blocks[i + 1]];
+      renderBlockEditor(el, page, blocks);
+    });
+  });
+  el.querySelectorAll('.block').forEach((blockEl) => {
+    blockEl.addEventListener('dragstart', () => { dragSrcIndex = Number(blockEl.dataset.i); blockEl.classList.add('dragging'); });
+    blockEl.addEventListener('dragend', () => blockEl.classList.remove('dragging'));
+    blockEl.addEventListener('dragover', (e) => e.preventDefault());
+    blockEl.addEventListener('drop', () => {
+      const destIndex = Number(blockEl.dataset.i);
+      if (dragSrcIndex === null || dragSrcIndex === destIndex) return;
+      const [moved] = blocks.splice(dragSrcIndex, 1);
+      blocks.splice(destIndex, 0, moved);
+      renderBlockEditor(el, page, blocks);
+    });
+  });
+}
+
+async function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
+  const { html } = await api(`/api/guest-portal?page=${activeTab}`);
+  let blocks = htmlToBlocks(html);
+  if (activeTab === 'splash' && !blocks.some((b) => b.type === 'login-form')) {
+    blocks.push({ type: 'login-form' });
+  }
+
+  el.innerHTML = `
+    <h1>Guest Portal Editor</h1>
+    <p class="hint">Guest WiFi flow ရဲ့ page ၃ ခုကို ဒီနေရာမှာ ပြင်နိုင်ပါသည် — Visual (drag & drop) သို့မဟုတ် HTML (advanced) နည်းနှစ်မျိုး ရွေးနိုင်ပါသည်။</p>
+    <div class="row" style="margin-bottom:12px">
+      ${GUEST_PAGES.map((p) => `<button class="${p.id === activeTab ? '' : 'ghost'}" data-tab="${p.id}">${p.label}</button>`).join('')}
+    </div>
+    <div class="tabs">
+      <button class="${mode === 'visual' ? 'active' : ''}" data-mode="visual">Visual</button>
+      <button class="${mode === 'html' ? 'active' : ''}" data-mode="html">HTML</button>
+    </div>
+    <div id="editor-body"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="save-btn">Save</button>
+      <button class="ghost" id="preview-btn">Preview</button>
+      <span id="save-status"></span>
+    </div>
+    <div id="preview-overlay" class="preview-overlay" hidden>
+      <div class="preview-panel">
+        <div class="preview-bar">
+          <span>Preview — ${escapeHtml(GUEST_PAGES.find((p) => p.id === activeTab).label)}</span>
+          <button class="ghost small" id="preview-close">Close ✕</button>
+        </div>
+        <iframe id="preview-frame"></iframe>
+      </div>
+    </div>
+  `;
+
+  el.querySelectorAll('button[data-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => renderGuestPortal(el, btn.dataset.tab, mode));
+  });
+  el.querySelectorAll('button[data-mode]').forEach((btn) => {
+    btn.addEventListener('click', () => renderGuestPortal(el, activeTab, btn.dataset.mode));
+  });
+
+  const body = document.getElementById('editor-body');
+  if (mode === 'visual') {
+    body.innerHTML = `
+      <div class="add-block-menu">
+        ${Object.keys(BLOCK_DEFS).map((t) => `<button class="ghost small" data-add="${t}">+ ${BLOCK_DEFS[t].label}</button>`).join('')}
+      </div>
+      <div class="blocks"></div>
+    `;
+    renderBlockEditor(body, activeTab, blocks);
+    body.querySelectorAll('[data-add]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.add;
+        const defaults = {
+          heading: { type, text: 'Heading' },
+          text: { type, text: 'Some text' },
+          button: { type, text: 'Click me', href: '/guest' },
+          image: { type, src: 'https://placehold.co/300x100' },
+          spacer: { type, height: 20 },
+        };
+        blocks.push(defaults[type]);
+        renderBlockEditor(body, activeTab, blocks);
+      });
+    });
+  } else {
+    body.innerHTML = `<textarea id="html-editor">${escapeHtml(html)}</textarea>`;
+  }
+
+  function currentHtml() {
+    return mode === 'visual' ? blocksToPage(blocks) : document.getElementById('html-editor').value;
+  }
+
+  document.getElementById('save-btn').addEventListener('click', async () => {
+    const status = document.getElementById('save-status');
+    status.textContent = ' Saving...';
+    try {
+      await api('/api/guest-portal', { method: 'POST', body: JSON.stringify({ page: activeTab, html: currentHtml() }) });
+      status.innerHTML = '<span class="ok">Saved ✓</span>';
+    } catch (err) {
+      status.innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+
+  document.getElementById('preview-btn').addEventListener('click', () => {
+    const overlay = document.getElementById('preview-overlay');
+    const frame = document.getElementById('preview-frame');
+    frame.srcdoc = currentHtml();
+    overlay.hidden = false;
+  });
+  document.getElementById('preview-close').addEventListener('click', () => {
+    document.getElementById('preview-overlay').hidden = true;
+  });
+}
+
+// ---------- VPN ----------
+async function renderVpn(el) {
+  const status = await api('/api/vpn');
+  el.innerHTML = `
+    <h1>VPN Config</h1>
+    <p>Status: <span class="badge">${status.enabled ? 'Enabled' : 'Disabled'}</span>
+       ${status.hasHandshake ? '<span class="badge" style="color:var(--good)">Handshake OK</span>' : status.enabled ? '<span class="badge" style="color:var(--danger)">No handshake yet</span>' : ''}</p>
+    <h3>Apply a new WireGuard config</h3>
+    <form id="vpn-form">
+      <label class="hint" style="display:block;margin-bottom:4px">Private Key</label>
+      <input name="privateKey" required />
+      <label class="hint" style="display:block;margin-bottom:4px">Peer Public Key</label>
+      <input name="peerPublicKey" required />
+      <label class="hint" style="display:block;margin-bottom:4px">Endpoint Host</label>
+      <input name="endpointHost" required />
+      <label class="hint" style="display:block;margin-bottom:4px">Endpoint Port</label>
+      <input name="endpointPort" required value="51820" />
+      <label class="hint" style="display:block;margin-bottom:4px">Address (e.g. 10.x.x.x/32)</label>
+      <input name="address" placeholder="10.99.99.2/32" />
+      <button type="submit">Apply</button>
+    </form>
+    <div class="row" style="margin-top:16px">
+      <button class="danger" id="disable-btn">Disable VPN</button>
+    </div>
+    <div id="vpn-status"></div>
+  `;
+  document.getElementById('vpn-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    const statusEl = document.getElementById('vpn-status');
+    statusEl.textContent = 'Applying...';
+    try {
+      await api('/api/vpn', { method: 'POST', body: JSON.stringify(body) });
+      statusEl.innerHTML = '<span class="ok">Applied ✓ — reloading status...</span>';
+      setTimeout(() => renderVpn(el), 2000);
+    } catch (err) {
+      statusEl.innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+  document.getElementById('disable-btn').addEventListener('click', async () => {
+    await api('/api/vpn/disable', { method: 'POST' });
+    renderVpn(el);
+  });
+}
+
+// ---------- Telegram ----------
+async function renderTelegram(el) {
+  const { botToken, chatId } = await api('/api/telegram');
+  el.innerHTML = `
+    <h1>Telegram Bot</h1>
+    <form id="tg-form">
+      <label class="hint" style="display:block;margin-bottom:4px">Bot Token</label>
+      <input name="botToken" value="${escapeAttr(botToken)}" required />
+      <label class="hint" style="display:block;margin-bottom:4px">Chat ID</label>
+      <input name="chatId" value="${escapeAttr(chatId)}" />
+      <button type="submit">Save</button>
+    </form>
+    <div class="row" style="margin-top:16px">
+      <button class="ghost" id="test-btn">Send test message</button>
+      <span id="tg-status"></span>
+    </div>
+  `;
+  document.getElementById('tg-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      await api('/api/telegram', { method: 'POST', body: JSON.stringify(body) });
+      document.getElementById('tg-status').innerHTML = '<span class="ok">Saved ✓</span>';
+    } catch (err) {
+      document.getElementById('tg-status').innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+  document.getElementById('test-btn').addEventListener('click', async () => {
+    const status = document.getElementById('tg-status');
+    status.textContent = ' Sending...';
+    try {
+      await api('/api/telegram/test', { method: 'POST' });
+      status.innerHTML = '<span class="ok">Sent ✓</span>';
+    } catch (err) {
+      status.innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+}
+
+// ---------- Password / timeout / rotation-time / QR ----------
+async function renderPassword(el) {
+  const [{ password, lastRotated }, { hours }, { time: rotationTime }] = await Promise.all([
+    api('/api/password'),
+    api('/api/password/session-timeout'),
+    api('/api/password/rotation-time'),
+  ]);
+  const wifiQr = `WIFI:T:nopass;S:${GUEST_SSID};;`;
+  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(wifiQr);
+
+  el.innerHTML = `
+    <h1>Guest Password</h1>
+    <div class="pw-display">${escapeHtml(password) || '(none)'}</div>
+    <p class="hint">Last rotated: ${escapeHtml(lastRotated) || 'unknown'}</p>
+    <button id="rotate-btn">Rotate now</button>
+    <span id="rotate-status"></span>
+
+    <h1 style="margin-top:32px">Scan to join WiFi</h1>
+    <p class="hint">"${GUEST_SSID}" ကို password မလိုပဲ ချိတ်ဆက်ပေးမည် — ချိတ်ပြီးရင် splash page မှာ password (${escapeHtml(password)}) ကို ထပ်ထည့်ရပါမည်။</p>
+    <div class="qr-box"><img src="${qrUrl}" alt="WiFi QR" /></div>
+
+    <h1 style="margin-top:32px">Rotation Time</h1>
+    <form id="rotation-time-form" class="row">
+      <input name="time" type="time" value="${escapeAttr(rotationTime)}" required style="width:140px" />
+      <button type="submit">Save</button>
+    </form>
+    <span id="rotation-time-status"></span>
+
+    <h1 style="margin-top:32px">Session Timeout</h1>
+    <form id="timeout-form" class="row">
+      <input name="hours" type="number" min="1" max="720" value="${hours}" style="width:100px" required />
+      <span style="color:var(--muted)">hours</span>
+      <button type="submit">Save</button>
+    </form>
+    <span id="timeout-status"></span>
+  `;
+  document.getElementById('rotate-btn').addEventListener('click', async () => {
+    const status = document.getElementById('rotate-status');
+    status.textContent = ' Rotating...';
+    try {
+      await api('/api/password/rotate', { method: 'POST' });
+      renderPassword(el);
+    } catch (err) {
+      status.innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+  document.getElementById('rotation-time-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('rotation-time-status');
+    const fd = new FormData(e.target);
+    status.textContent = ' Saving...';
+    try {
+      await api('/api/password/rotation-time', { method: 'POST', body: JSON.stringify({ time: fd.get('time') }) });
+      status.innerHTML = '<span class="ok">Saved ✓</span>';
+    } catch (err) {
+      status.innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+  document.getElementById('timeout-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('timeout-status');
+    const fd = new FormData(e.target);
+    status.textContent = ' Saving...';
+    try {
+      await api('/api/password/session-timeout', { method: 'POST', body: JSON.stringify({ hours: Number(fd.get('hours')) }) });
+      status.innerHTML = '<span class="ok">Saved ✓ (guests logged out)</span>';
+    } catch (err) {
+      status.innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+}
+
+// ---------- Settings: change API token ----------
+async function renderSettings(el) {
+  el.innerHTML = `
+    <h1>Settings</h1>
+    <h3>API Connection</h3>
+    <p class="hint">Base URL: ${escapeHtml(getBase())}</p>
+
+    <h3>Change API Token</h3>
+    <p class="hint">Token အသစ် သတ်မှတ်ပြီးရင် router ဘက်က token file ပြန်ရေးမည်, ဒီ browser ကလည်း token အသစ်ကို auto သိမ်းပေးမည်။</p>
+    <form id="token-form">
+      <input name="newToken" placeholder="New token (16+ characters, letters/numbers)" required minlength="16" />
+      <button type="submit">Change Token</button>
+    </form>
+    <span id="token-status"></span>
+  `;
+  document.getElementById('token-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('token-status');
+    const fd = new FormData(e.target);
+    const newToken = fd.get('newToken').trim();
+    status.textContent = ' Applying...';
+    try {
+      await api('/api/token', { method: 'POST', body: JSON.stringify({ newToken }) });
+      localStorage.setItem('flint3_api_token', newToken);
+      status.innerHTML = '<span class="ok">Token ပြောင်းပြီးပါပြီ ✓</span>';
+      e.target.reset();
+    } catch (err) {
+      status.innerHTML = `<span class="error">${err.message}</span>`;
+    }
+  });
+}
+
+// ---------- Boot ----------
+(async function boot() {
+  if (!getToken()) return renderLogin();
+  try {
+    await api('/api/password');
+    renderDashboard();
+  } catch {
+    renderLogin();
+  }
+})();
+</script>
+</body>
+</html>
