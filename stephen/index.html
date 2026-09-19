@@ -294,6 +294,7 @@ const GUEST_PAGES = [
   { id: 'splash', label: 'Splash (login form)' },
   { id: 'error', label: 'Wrong password' },
   { id: 'success', label: 'Connected' },
+  { id: 'notfound', label: '404 Page' },
 ];
 
 const BLOCK_DEFS = {
@@ -409,7 +410,7 @@ async function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
 
   el.innerHTML = `
     <h1>Guest Portal Editor</h1>
-    <p class="hint">Guest WiFi flow ရဲ့ page ၃ ခုကို ဒီနေရာမှာ ပြင်နိုင်ပါသည် — Visual (drag & drop) သို့မဟုတ် HTML (advanced) နည်းနှစ်မျိုး ရွေးနိုင်ပါသည်။</p>
+    <p class="hint">Guest WiFi flow ရဲ့ page ၄ ခုကို ဒီနေရာမှာ ပြင်နိုင်ပါသည် — Visual (drag & drop) သို့မဟုတ် HTML (advanced) နည်းနှစ်မျိုး ရွေးနိုင်ပါသည်။${activeTab === 'notfound' ? ' "404 Page" က router ကို Funnel/GoodCloud ကနေ ဖွင့်တဲ့အခါ မရှိတဲ့ URL ကို ဝင်မိရင် ပြသမည့် page ဖြစ်ပြီး Guest WiFi ရဲ့ captive portal ကို ထိခိုက်မည်မဟုတ်ပါ။' : ''}</p>
     <div class="row" style="margin-bottom:12px">
       ${GUEST_PAGES.map((p) => `<button class="${p.id === activeTab ? '' : 'ghost'}" data-tab="${p.id}">${p.label}</button>`).join('')}
     </div>
