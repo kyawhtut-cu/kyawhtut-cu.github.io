@@ -166,7 +166,7 @@ function renderLogin(errorMsg) {
         ${errorMsg ? `<div class="error">${errorMsg}</div>` : ''}
         <form id="login-form">
           <input type="text" id="base" placeholder="API base URL" value="${escapeAttr(getBase())}" required />
-          <input type="password" id="token" placeholder="Router password" required />
+          <input type="password" id="token" placeholder="Router password" autocomplete="off" autocorrect="off" spellcheck="false" required />
           <button type="submit">Connect</button>
         </form>
       </div>
