@@ -131,7 +131,7 @@ function getBase() {
   // matter which hostname was used to reach the page.
   return location.hostname === 'kyawhtut-cu.github.io' ? 'https://gl-be9300.ewe-pride.ts.net' : location.origin;
 }
-function getToken() { return localStorage.getItem('flint3_api_token') || ''; }
+function getToken() { return sessionStorage.getItem('flint3_api_token') || ''; }
 
 async function api(path, opts = {}) {
   const res = await fetch(getBase() + path, {
@@ -177,9 +177,9 @@ function renderLogin(errorMsg) {
     const base = document.getElementById('base').value.trim().replace(/\/$/, '');
     const token = document.getElementById('token').value.trim();
     localStorage.setItem('flint3_api_base', base);
-    localStorage.setItem('flint3_api_token', token);
+    sessionStorage.setItem('flint3_api_token', token);
     try {
-      await api('/api/password');
+      await api('/api/whoami');
       renderDashboard();
     } catch (err) {
       renderLogin(err.message);
@@ -191,6 +191,7 @@ function renderLogin(errorMsg) {
 const PAGES = [
   { id: 'clients', label: 'Clients' },
   { id: 'guest-portal', label: 'Guest Portal Editor' },
+  { id: 'nginx-config', label: 'Nginx Config' },
   { id: 'vpn', label: 'VPN Config' },
   { id: 'telegram', label: 'Telegram Bot' },
   { id: 'password', label: 'Guest Password' },
@@ -228,7 +229,7 @@ function renderDashboard(activePage = 'clients') {
   });
   shell.querySelector(`a[data-page="${activePage}"]`).classList.add('active');
   document.getElementById('logout').addEventListener('click', () => {
-    localStorage.removeItem('flint3_api_token');
+    sessionStorage.removeItem('flint3_api_token');
     renderLogin();
   });
 
@@ -244,6 +245,7 @@ async function loadPage(page) {
   try {
     if (page === 'clients') return renderClients(el);
     if (page === 'guest-portal') return renderGuestPortal(el);
+    if (page === 'nginx-config') return renderNginxConfig(el);
     if (page === 'vpn') return renderVpn(el);
     if (page === 'telegram') return renderTelegram(el);
     if (page === 'password') return renderPassword(el);
@@ -294,6 +296,8 @@ const GUEST_PAGES = [
   { id: 'splash', label: 'Splash (login form)' },
   { id: 'error', label: 'Wrong password' },
   { id: 'success', label: 'Connected' },
+];
+const NGINX_PAGES = [
   { id: 'notfound', label: '404 Page' },
 ];
 
@@ -401,7 +405,7 @@ function renderBlockEditor(el, page, blocks) {
   });
 }
 
-async function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
+async function renderPortalEditor(el, pages, heading, hint, renderSelf, activeTab, mode = 'visual') {
   const { html } = await api(`/api/guest-portal?page=${activeTab}`);
   let blocks = htmlToBlocks(html);
   if (activeTab === 'splash' && !blocks.some((b) => b.type === 'login-form')) {
@@ -409,10 +413,10 @@ async function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
   }
 
   el.innerHTML = `
-    <h1>Guest Portal Editor</h1>
-    <p class="hint">Guest WiFi flow ရဲ့ page ၄ ခုကို ဒီနေရာမှာ ပြင်နိုင်ပါသည် — Visual (drag & drop) သို့မဟုတ် HTML (advanced) နည်းနှစ်မျိုး ရွေးနိုင်ပါသည်။${activeTab === 'notfound' ? ' "404 Page" က router ကို Funnel/GoodCloud ကနေ ဖွင့်တဲ့အခါ မရှိတဲ့ URL ကို ဝင်မိရင် ပြသမည့် page ဖြစ်ပြီး Guest WiFi ရဲ့ captive portal ကို ထိခိုက်မည်မဟုတ်ပါ။' : ''}</p>
+    <h1>${escapeHtml(heading)}</h1>
+    <p class="hint">${hint}</p>
     <div class="row" style="margin-bottom:12px">
-      ${GUEST_PAGES.map((p) => `<button class="${p.id === activeTab ? '' : 'ghost'}" data-tab="${p.id}">${p.label}</button>`).join('')}
+      ${pages.map((p) => `<button class="${p.id === activeTab ? '' : 'ghost'}" data-tab="${p.id}">${p.label}</button>`).join('')}
     </div>
     <div class="tabs">
       <button class="${mode === 'visual' ? 'active' : ''}" data-mode="visual">Visual</button>
@@ -427,7 +431,7 @@ async function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
     <div id="preview-overlay" class="preview-overlay" hidden>
       <div class="preview-panel">
         <div class="preview-bar">
-          <span>Preview — ${escapeHtml(GUEST_PAGES.find((p) => p.id === activeTab).label)}</span>
+          <span>Preview — ${escapeHtml(pages.find((p) => p.id === activeTab).label)}</span>
           <button class="ghost small" id="preview-close">Close ✕</button>
         </div>
         <iframe id="preview-frame"></iframe>
@@ -436,10 +440,10 @@ async function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
   `;
 
   el.querySelectorAll('button[data-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => renderGuestPortal(el, btn.dataset.tab, mode));
+    btn.addEventListener('click', () => renderSelf(el, btn.dataset.tab, mode));
   });
   el.querySelectorAll('button[data-mode]').forEach((btn) => {
-    btn.addEventListener('click', () => renderGuestPortal(el, activeTab, btn.dataset.mode));
+    btn.addEventListener('click', () => renderSelf(el, activeTab, btn.dataset.mode));
   });
 
   const body = document.getElementById('editor-body');
@@ -493,6 +497,16 @@ async function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
   document.getElementById('preview-close').addEventListener('click', () => {
     document.getElementById('preview-overlay').hidden = true;
   });
+}
+
+function renderGuestPortal(el, activeTab = 'splash', mode = 'visual') {
+  const hint = 'Guest WiFi flow ရဲ့ page ၃ ခုကို ဒီနေရာမှာ ပြင်နိုင်ပါသည် — Visual (drag & drop) သို့မဟုတ် HTML (advanced) နည်းနှစ်မျိုး ရွေးနိုင်ပါသည်။';
+  return renderPortalEditor(el, GUEST_PAGES, 'Guest Portal Editor', hint, renderGuestPortal, activeTab, mode);
+}
+
+function renderNginxConfig(el, activeTab = 'notfound', mode = 'visual') {
+  const hint = 'Router ရဲ့ nginx-level page များကို ဒီနေရာမှာ ပြင်နိုင်ပါသည်။ "404 Page" က router ကို Funnel/GoodCloud ကနေ ဖွင့်တဲ့အခါ မရှိတဲ့ URL ကို ဝင်မိရင် ပြသမည့် page ဖြစ်ပြီး Guest WiFi ရဲ့ captive portal ကို ထိခိုက်မည်မဟုတ်ပါ။';
+  return renderPortalEditor(el, NGINX_PAGES, 'Nginx Config', hint, renderNginxConfig, activeTab, mode);
 }
 
 // ---------- VPN ----------
@@ -666,7 +680,7 @@ function getIdleTimeoutMin() {
 function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
-    localStorage.removeItem('flint3_api_token');
+    sessionStorage.removeItem('flint3_api_token');
     renderLogin('Inactive အကြာကြီးဖြစ်နေလို့ auto logout ဖြစ်သွားပါပြီ။ Password ကို ပြန်ရိုက်ထည့်ပါ။');
   }, getIdleTimeoutMin() * 60 * 1000);
 }
