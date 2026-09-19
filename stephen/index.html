@@ -154,11 +154,11 @@ function renderLogin(errorMsg) {
     <div class="center-screen">
       <div class="card">
         <h1>Flint 3 Remote Dashboard</h1>
-        <p class="hint">Router ရဲ့ API base URL နှင့် token ကို ရိုက်ထည့်ပါ</p>
+        <p class="hint">Router ရဲ့ Admin/SSH password ကို ရိုက်ထည့်ပါ (router password ပြောင်းရင် ဒီနေရာမှာလည်း password အသစ်ကို ပြန်ရိုက်ရပါမည်)</p>
         ${errorMsg ? `<div class="error">${errorMsg}</div>` : ''}
         <form id="login-form">
           <input type="text" id="base" placeholder="API base URL" value="${escapeAttr(getBase())}" required />
-          <input type="password" id="token" placeholder="API token" required />
+          <input type="password" id="token" placeholder="Router password" required />
           <button type="submit">Connect</button>
         </form>
       </div>
@@ -224,6 +224,7 @@ function renderDashboard(activePage = 'clients') {
     renderLogin();
   });
 
+  setupIdleWatcher();
   loadPage(activePage);
 }
 
@@ -543,7 +544,10 @@ async function renderTelegram(el) {
       <input name="chatId" value="${escapeAttr(chatId)}" />
       <button type="submit">Save</button>
     </form>
-    <div class="row" style="margin-top:16px">
+    <h3 style="margin-top:24px">Send Test Message</h3>
+    <p class="hint">စာ မရိုက်ထားရင် default စာနဲ့ ပို့ပေးပါမည်။</p>
+    <textarea id="test-message" placeholder="Flint 3 remote API test" style="min-height:70px"></textarea>
+    <div class="row">
       <button class="ghost" id="test-btn">Send test message</button>
       <span id="tg-status"></span>
     </div>
@@ -561,9 +565,10 @@ async function renderTelegram(el) {
   });
   document.getElementById('test-btn').addEventListener('click', async () => {
     const status = document.getElementById('tg-status');
+    const text = document.getElementById('test-message').value.trim();
     status.textContent = ' Sending...';
     try {
-      await api('/api/telegram/test', { method: 'POST' });
+      await api('/api/telegram/test', { method: 'POST', body: JSON.stringify({ text }) });
       status.innerHTML = '<span class="ok">Sent ✓</span>';
     } catch (err) {
       status.innerHTML = `<span class="error">${err.message}</span>`;
@@ -643,35 +648,52 @@ async function renderPassword(el) {
   });
 }
 
-// ---------- Settings: change API token ----------
+// ---------- Idle auto-logout ----------
+let idleTimer = null;
+let idleWatcherSetup = false;
+function getIdleTimeoutMin() {
+  return Number(localStorage.getItem('flint3_idle_timeout_min')) || 10;
+}
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    localStorage.removeItem('flint3_api_token');
+    renderLogin('Inactive အကြာကြီးဖြစ်နေလို့ auto logout ဖြစ်သွားပါပြီ။ Password ကို ပြန်ရိုက်ထည့်ပါ။');
+  }, getIdleTimeoutMin() * 60 * 1000);
+}
+function setupIdleWatcher() {
+  if (idleWatcherSetup) { resetIdleTimer(); return; }
+  idleWatcherSetup = true;
+  ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach((evt) => {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+  });
+  resetIdleTimer();
+}
+
+// ---------- Settings ----------
 async function renderSettings(el) {
   el.innerHTML = `
     <h1>Settings</h1>
     <h3>API Connection</h3>
     <p class="hint">Base URL: ${escapeHtml(getBase())}</p>
+    <p class="hint">Login password ဟာ router ရဲ့ Admin/SSH password တစ်ခုတည်းပါပဲ — router password ပြောင်းရင် ဒီနေရာက password ကို auto ပြောင်းပေးမှာမို့ separate token setting မလိုပါ။</p>
 
-    <h3>Change API Token</h3>
-    <p class="hint">Token အသစ် သတ်မှတ်ပြီးရင် router ဘက်က token file ပြန်ရေးမည်, ဒီ browser ကလည်း token အသစ်ကို auto သိမ်းပေးမည်။</p>
-    <form id="token-form">
-      <input name="newToken" placeholder="New token (16+ characters, letters/numbers)" required minlength="16" />
-      <button type="submit">Change Token</button>
+    <h3 style="margin-top:24px">Auto-Logout (Inactivity Timeout)</h3>
+    <p class="hint">ဒီအချိန်ကြာ (မိနစ်) ဘာမှ မလှုပ်ရှားရင် dashboard ကနေ auto logout ဖြစ်သွားပါမည်။</p>
+    <form id="idle-form" class="row">
+      <input name="minutes" type="number" min="1" max="180" value="${getIdleTimeoutMin()}" style="width:100px" required />
+      <span style="color:var(--muted)">minutes</span>
+      <button type="submit">Save</button>
     </form>
-    <span id="token-status"></span>
+    <span id="idle-status"></span>
   `;
-  document.getElementById('token-form').addEventListener('submit', async (e) => {
+  document.getElementById('idle-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const status = document.getElementById('token-status');
     const fd = new FormData(e.target);
-    const newToken = fd.get('newToken').trim();
-    status.textContent = ' Applying...';
-    try {
-      await api('/api/token', { method: 'POST', body: JSON.stringify({ newToken }) });
-      localStorage.setItem('flint3_api_token', newToken);
-      status.innerHTML = '<span class="ok">Token ပြောင်းပြီးပါပြီ ✓</span>';
-      e.target.reset();
-    } catch (err) {
-      status.innerHTML = `<span class="error">${err.message}</span>`;
-    }
+    const minutes = Math.max(1, Math.min(180, Number(fd.get('minutes')) || 10));
+    localStorage.setItem('flint3_idle_timeout_min', String(minutes));
+    resetIdleTimer();
+    document.getElementById('idle-status').innerHTML = '<span class="ok">Saved ✓</span>';
   });
 }
 
