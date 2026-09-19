@@ -122,7 +122,15 @@
 const appEl = document.getElementById('app');
 const GUEST_SSID = 'Stephen Guest';
 
-function getBase() { return localStorage.getItem('flint3_api_base') || 'https://gl-be9300.ewe-pride.ts.net'; }
+function getBase() {
+  const saved = localStorage.getItem('flint3_api_base');
+  if (saved) return saved;
+  // Hosted on github.io (cross-origin) needs the absolute Funnel URL.
+  // Hosted directly by the router (any hostname: Funnel, GoodCloud proxy, raw IP)
+  // is same-origin with the API, so a relative base works automatically no
+  // matter which hostname was used to reach the page.
+  return location.hostname === 'kyawhtut-cu.github.io' ? 'https://gl-be9300.ewe-pride.ts.net' : '';
+}
 function getToken() { return localStorage.getItem('flint3_api_token') || ''; }
 
 async function api(path, opts = {}) {
